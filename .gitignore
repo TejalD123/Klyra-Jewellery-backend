@@ -1,0 +1,82 @@
+# ==========================
+# Dependencies
+# ==========================
+node_modules/
+.pnp
+.pnp.js
+
+# ==========================
+# Environment variables (NEVER commit real secrets)
+# ==========================
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# ==========================
+# Firebase service account (contains private keys)
+# ==========================
+src/config/serviceAccountKey.json
+serviceAccountKey.json
+*serviceAccountKey*.json
+
+# ==========================
+# Logs
+# ==========================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================
+# Uploads / temp files (if multer writes to disk before Cloudinary upload)
+# ==========================
+uploads/
+tmp/
+temp/
+
+# ==========================
+# OS files
+# ==========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================
+# Editor / IDE
+# ==========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ==========================
+# Testing / coverage
+# ==========================
+coverage/
+.nyc_output/
+
+# ==========================
+# Build output (if you ever add a build step)
+# ==========================
+dist/
+build/
+
+# ==========================
+# Package manager lockfile noise (keep ONE lockfile type, ignore the rest)
+# ==========================
+# Uncomment based on which package manager you standardize on:
+# yarn.lock
+# pnpm-lock.yaml
+
+# ==========================
+# Misc
+# ==========================
+*.pid
+*.seed
+*.pid.lock
+.cache/
