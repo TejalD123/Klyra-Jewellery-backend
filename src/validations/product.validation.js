@@ -23,6 +23,7 @@ const createProductSchema = Joi.object({
   sizeOptions: Joi.array().items(Joi.string().trim()).default([]),
   isCustomizable: Joi.boolean().default(false),
   isFeatured: Joi.boolean().default(false),
+  isBestseller: Joi.boolean().default(false), // NEW
   isActive: Joi.boolean().default(true),
   // images come via multipart/form-data files (req.files), not JSON body
   // finalPrice & ratings are server-calculated, never accepted from client
@@ -44,6 +45,7 @@ const updateProductSchema = Joi.object({
   sizeOptions: Joi.array().items(Joi.string().trim()),
   isCustomizable: Joi.boolean(),
   isFeatured: Joi.boolean(),
+  isBestseller: Joi.boolean(), // NEW
   isActive: Joi.boolean(),
   // to remove specific existing images, pass array of URLs to keep
   keepImages: Joi.array().items(Joi.string().uri()),

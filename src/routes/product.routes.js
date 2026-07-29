@@ -9,6 +9,7 @@ const {
   updateProduct,
   updateStock,
   toggleFeatured,
+  toggleBestseller,
   toggleStatus,
   deleteProduct,
 } = require("../controller/product.controller");
@@ -71,6 +72,13 @@ router.patch(
   protect,
   restrictTo("admin"),
   toggleFeatured
+);
+
+router.patch(
+  "/:id/toggle-bestseller",
+  protect,
+  restrictTo("admin"),
+  toggleBestseller
 );
 
 router.patch(

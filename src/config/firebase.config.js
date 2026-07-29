@@ -1,4 +1,5 @@
-const admin = require("firebase-admin");
+const { initializeApp, cert } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 
 // serviceAccountKey.json Firebase console se download hoti hai
 // (Project Settings -> Service Accounts -> Generate New Private Key)
@@ -15,8 +16,10 @@ try {
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 }
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+const app = initializeApp({
+  credential: cert(serviceAccount),
 });
 
-module.exports = admin;
+const auth = getAuth(app);
+
+module.exports = { app, auth };

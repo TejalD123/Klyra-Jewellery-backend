@@ -2,8 +2,6 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
   {
-    // Not collected at registration anymore — user fills this in later
-    // (e.g. via a profile-update step), so it's optional here.
     fullName: {
       type: String,
       trim: true,
@@ -20,19 +18,23 @@ const userSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: [true, "Email is required"],
       trim: true,
       lowercase: true,
       unique: true,
+      sparse: true,
+      validate: {
+        validator: function (value) {
+          return !!(value || this.phone);
+        },
+        message: "Either email or phone is required.",
+      },
     },
     phone: {
       type: String,
-      required: [true, "Phone number is required"],
       trim: true,
       unique: true,
+      sparse: true,
     },
-    // A user only needs ONE of these two to be true (whichever channel
-    // they chose to verify with during registration) to be able to log in.
     isEmailVerified: {
       type: Boolean,
       default: false,
@@ -52,14 +54,10 @@ const userSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, // adds createdAt and updatedAt automatically
+    timestamps: true,
   }
 );
 
-/**
- * Strip sensitive/internal fields before sending the user object
- * back to the client in API responses.
- */
 userSchema.methods.toSafeObject = function () {
   const obj = this.toObject();
   delete obj.refreshToken;

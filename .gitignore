@@ -80,3 +80,5 @@ build/
 *.seed
 *.pid.lock
 .cache/
+
+serviceAccountKey.json

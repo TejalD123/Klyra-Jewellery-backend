@@ -1,10 +1,6 @@
 const { body, validationResult } = require("express-validator");
 const ApiError = require("../utils/apiError");
 
-/**
- * Runs after every *Validator array (express-validator). Collects
- * express-validator errors and throws a single ApiError if anything failed.
- */
 const validateRequest = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -13,74 +9,122 @@ const validateRequest = (req, res, next) => {
   next();
 };
 
-/**
- * Generic Joi-schema validator middleware factory.
- * Usage: router.post("/", validateSchema(someJoiSchema), controllerFn)
- */
 const validateSchema = (schema) => {
   return (req, res, next) => {
     const { error, value } = schema.validate(req.body, {
       abortEarly: false,
       stripUnknown: true,
     });
-
     if (error) {
       return res.status(400).json({
         success: false,
         message: error.details.map((err) => err.message),
       });
     }
-
     req.body = value;
     next();
   };
 };
 
-// Shared "channel" field used across almost every auth endpoint.
-const channelField = body("channel")
-  .isIn(["email", "phone"])
-  .withMessage("channel must be either 'email' or 'phone'");
-
+// ---------------------------------------------------------------------
+// REGISTER
+//   Email path -> { fullName, email }
+//   Phone path -> { fullName, phone, idToken }
+// Exactly one of email / idToken must be present.
+// ---------------------------------------------------------------------
 const registerValidator = [
-  body("username")
+  body("fullName")
+    .if((value, { req }) => req.body.provider !== "google")
     .trim()
-    .isLength({ min: 3, max: 30 })
-    .withMessage("Username must be between 3 and 30 characters")
-    .matches(/^[a-zA-Z0-9_.]+$/)
-    .withMessage("Username can only contain letters, numbers, underscores and dots"),
-  body("email").trim().isEmail().withMessage("A valid email is required").normalizeEmail(),
-  body("phone").trim().notEmpty().withMessage("Phone number is required"),
-  channelField,
+    .notEmpty()
+    .withMessage("Full name is required"),
+
+  body("email")
+    .if(body("idToken").not().exists())
+    .trim()
+    .isEmail()
+    .withMessage("A valid email is required")
+    .normalizeEmail(),
+
+  body("idToken")
+    .if(body("email").not().exists())
+    .notEmpty()
+    .withMessage("Firebase idToken is required for phone registration"),
+
+  body("phone")
+    .if((value, { req }) => req.body.idToken && req.body.provider !== "google")
+    .trim()
+    .notEmpty()
+    .withMessage("Phone number is required when using idToken"),
+
+  body().custom((value) => {
+    if (!value.email && !value.idToken) {
+      throw new Error("Either email or idToken (with phone) is required");
+    }
+    return true;
+  }),
 ];
 
+// ---------------------------------------------------------------------
+// VERIFY REGISTRATION OTP — email only (phone never hits this endpoint,
+// Firebase verifies phone client-side before /register is even called)
+// ---------------------------------------------------------------------
 const verifyRegistrationOtpValidator = [
-  body("identifier").trim().notEmpty().withMessage("identifier is required"),
+  body("email").trim().isEmail().withMessage("A valid email is required").normalizeEmail(),
   body("otp").trim().isLength({ min: 6, max: 6 }).withMessage("OTP must be exactly 6 digits"),
-  channelField,
 ];
 
+// ---------------------------------------------------------------------
+// LOGIN
+//   Email path -> { email }
+//   Phone path -> { phone, idToken }
+// ---------------------------------------------------------------------
 const loginValidator = [
-  body("identifier").trim().notEmpty().withMessage("identifier is required"),
-  channelField,
+  body("email")
+    .if(body("idToken").not().exists())
+    .trim()
+    .isEmail()
+    .withMessage("A valid email is required")
+    .normalizeEmail(),
+
+  body("idToken")
+    .if(body("email").not().exists())
+    .notEmpty()
+    .withMessage("Firebase idToken is required for phone login"),
+
+  body("phone")
+    .if(body("idToken").exists())
+    .trim()
+    .notEmpty()
+    .withMessage("Phone number is required when using idToken"),
+
+  body().custom((value) => {
+    if (!value.email && !value.idToken) {
+      throw new Error("Either email or idToken (with phone) is required");
+    }
+    return true;
+  }),
 ];
 
+// ---------------------------------------------------------------------
+// VERIFY LOGIN OTP — email only
+// ---------------------------------------------------------------------
 const verifyLoginOtpValidator = [
-  body("identifier").trim().notEmpty().withMessage("identifier is required"),
+  body("email").trim().isEmail().withMessage("A valid email is required").normalizeEmail(),
   body("otp").trim().isLength({ min: 6, max: 6 }).withMessage("OTP must be exactly 6 digits"),
-  channelField,
 ];
 
+// ---------------------------------------------------------------------
+// RESEND OTP — email only (phone resend just calls Firebase again
+// client-side, no backend endpoint involved)
+// ---------------------------------------------------------------------
 const resendOtpValidator = [
-  body("identifier").trim().notEmpty().withMessage("identifier is required"),
-  channelField,
+  body("email").trim().isEmail().withMessage("A valid email is required").normalizeEmail(),
   body("purpose")
     .isIn(["registration", "login"])
     .withMessage("purpose must be either 'registration' or 'login'"),
 ];
 
-// Refresh token normally arrives via the httpOnly cookie, so the body
-// field is optional; this validator exists mainly to keep the route
-// signature consistent with the others.
 const refreshTokenValidator = [
   body("refreshToken").optional().isString(),
 ];

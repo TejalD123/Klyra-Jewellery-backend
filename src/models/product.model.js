@@ -107,6 +107,15 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // NEW — manual admin-set flag, same pattern as isFeatured. Not
+    // sales-derived (no order-count aggregation) so it stays cheap to
+    // query/filter/sort on for the storefront filter bar. If you'd rather
+    // it be computed from actual sales later, that's a separate aggregation
+    // job — this flag can stay as a manual override either way.
+    isBestseller: {
+      type: Boolean,
+      default: false,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -127,6 +136,7 @@ const productSchema = new mongoose.Schema(
 productSchema.index({ category: 1, isActive: 1 });
 productSchema.index({ metalType: 1 });
 productSchema.index({ isFeatured: 1, isActive: 1 });
+productSchema.index({ isBestseller: 1, isActive: 1 }); // NEW
 productSchema.index({ basePrice: 1 });
 productSchema.index({ name: "text", description: "text", sku: "text" });
 
