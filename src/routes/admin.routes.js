@@ -75,7 +75,7 @@ const {
 const {
   createDeliveryAgencySchema,
   updateDeliveryAgencySchema,
-} = require("../validations/deliveryAgency.validation");
+} = require("../validations/deliveryagency.validation");
 
 const CATEGORY_JSON_FIELDS = ["metalTypes", "attributes"];
 

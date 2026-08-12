@@ -18,6 +18,7 @@ const notificationRoutes = require("./notification.routes.js");
 const reviewRoutes = require("./review.routes.js");
 const queriesRoutes = require("./query.routes.js");
 
+
 router.use("/notifications", notificationRoutes);
 router.use("/reviews", reviewRoutes);
 
