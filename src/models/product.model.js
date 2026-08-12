@@ -8,6 +8,19 @@ const ratingsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// name/value pair — e.g. { name: "Occasion", value: "Wedding" }. The
+// allowed `name`+`value` combos come from the product's category
+// (category.attributes[].options), the admin form just picks one value
+// per attribute the category defines. Not enforced at the schema level
+// (categories change over time) — validated at the Joi layer instead.
+const productAttributeSchema = new mongoose.Schema(
+  {
+    name: { type: String, trim: true, required: true },
+    value: { type: String, trim: true, required: true },
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     name: {
@@ -63,6 +76,14 @@ const productSchema = new mongoose.Schema(
       enum: ["Pearl", "Diamond", "Kundan", "Ruby", "Emerald", "None"],
       default: "None",
     },
+    // NEW — dynamic, category-driven filters (Occasion, Style/Western vs
+    // Traditional, etc). Each category defines which attribute names +
+    // options are valid (category.model.js's `attributes` field); this is
+    // where the actual chosen value lives per product.
+    attributes: {
+      type: [productAttributeSchema],
+      default: [],
+    },
     makingCharges: {
       type: Number,
       default: 0,
@@ -107,11 +128,6 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    // NEW — manual admin-set flag, same pattern as isFeatured. Not
-    // sales-derived (no order-count aggregation) so it stays cheap to
-    // query/filter/sort on for the storefront filter bar. If you'd rather
-    // it be computed from actual sales later, that's a separate aggregation
-    // job — this flag can stay as a manual override either way.
     isBestseller: {
       type: Boolean,
       default: false,
@@ -136,9 +152,11 @@ const productSchema = new mongoose.Schema(
 productSchema.index({ category: 1, isActive: 1 });
 productSchema.index({ metalType: 1 });
 productSchema.index({ isFeatured: 1, isActive: 1 });
-productSchema.index({ isBestseller: 1, isActive: 1 }); // NEW
+productSchema.index({ isBestseller: 1, isActive: 1 });
 productSchema.index({ basePrice: 1 });
 productSchema.index({ name: "text", description: "text", sku: "text" });
+// NEW — supports filtering products by attribute name+value (Occasion=Wedding, Style=Traditional, etc)
+productSchema.index({ "attributes.name": 1, "attributes.value": 1 });
 
 function slugify(text) {
   return text
@@ -158,10 +176,13 @@ function generateSkuBase(name, metalType) {
 }
 
 // Auto slug (on name change) + auto SKU (if missing) + finalPrice calc
-productSchema.pre("save", async function (next) {
+// NOTE: this is an ASYNC pre-save hook, so Mongoose treats it as
+// promise-based middleware and does NOT pass a `next` callback. Do not
+// declare/call `next` here — just let the async function resolve when
+// done. Calling next() throws "TypeError: next is not a function".
+productSchema.pre("save", async function () {
   const ProductModel = this.constructor;
 
-  // ---- Slug ----
   if (this.isModified("name")) {
     let baseSlug = slugify(this.name);
     let uniqueSlug = baseSlug;
@@ -175,7 +196,6 @@ productSchema.pre("save", async function (next) {
     this.slug = uniqueSlug;
   }
 
-  // ---- SKU (auto-generate only if not provided) ----
   if (!this.sku) {
     let sku = generateSkuBase(this.name, this.metalType);
     while (await ProductModel.findOne({ sku, _id: { $ne: this._id } })) {
@@ -184,7 +204,6 @@ productSchema.pre("save", async function (next) {
     this.sku = sku;
   }
 
-  // ---- finalPrice = (basePrice + makingCharges) - discount% ----
   if (
     this.isModified("basePrice") ||
     this.isModified("makingCharges") ||
@@ -194,8 +213,6 @@ productSchema.pre("save", async function (next) {
     const discountAmount = (subtotal * (this.discount || 0)) / 100;
     this.finalPrice = Math.round((subtotal - discountAmount) * 100) / 100;
   }
-
-  next();
 });
 
 module.exports = mongoose.model("Product", productSchema);

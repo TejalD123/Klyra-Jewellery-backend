@@ -1,4 +1,3 @@
-const mongoose = require("mongoose");
 const Notification = require("../models/notification.model");
 const ApiResponse = require("../utils/apiResponse");
 const ApiError = require("../utils/apiError");
@@ -62,9 +61,6 @@ const getUnreadCount = asyncHandler(async (req, res) => {
  */
 const markAsRead = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    throw ApiError.badRequest("Invalid notification id");
-  }
 
   const notification = await Notification.findByIdAndUpdate(
     id,
@@ -97,9 +93,6 @@ const markAllAsRead = asyncHandler(async (req, res) => {
  */
 const deleteNotification = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    throw ApiError.badRequest("Invalid notification id");
-  }
 
   const notification = await Notification.findByIdAndDelete(id);
   if (!notification) throw ApiError.notFound("Notification not found");

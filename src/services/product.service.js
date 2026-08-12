@@ -24,19 +24,48 @@ const createProductService = async ({ body, files, userId }) => {
   return Product.create({ ...body, images, createdBy: userId });
 };
 
+// Accepts either a single category id ("507f...") or a comma-separated
+// list ("507f...,507f...") — the storefront's FilterSidebar can select
+// multiple categories/subcategories at once. Resolves each id to itself
+// + its direct subcategories, then flattens/dedupes into one id list.
+const resolveCategoryIds = async (categoryParam) => {
+  const ids = String(categoryParam)
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  const idLists = await Promise.all(
+    ids.map(async (id) => {
+      const subcategories = await Category.find({ parentCategory: id }).select("_id");
+      return [id, ...subcategories.map((c) => c._id.toString())];
+    })
+  );
+
+  return [...new Set(idLists.flat())];
+};
+
 const getAllProductsService = async (query) => {
   const {
     category, metalType, stoneType, purity, minPrice, maxPrice,
-    isFeatured, isActive, inStock, search,
+    isFeatured, isBestseller, isCustomizable, isActive, inStock, search, size,
     page = 1, limit = 20, sort = "-createdAt",
+    ...rest
   } = query;
 
   const filter = {};
-  if (category) filter.category = category;
+  if (category) {
+    const categoryIds = await resolveCategoryIds(category);
+    filter.category = { $in: categoryIds };
+  }
   if (metalType) filter.metalType = metalType.toLowerCase();
   if (stoneType) filter.stoneType = stoneType;
   if (purity) filter.purity = purity;
   if (isFeatured !== undefined) filter.isFeatured = isFeatured === "true";
+  // NEW — Bestseller / Customizable ("Features" section in the search
+  // sidebar). isBestseller already existed on the model but wasn't
+  // filterable from the search API before.
+  if (isBestseller !== undefined) filter.isBestseller = isBestseller === "true";
+  if (isCustomizable !== undefined) filter.isCustomizable = isCustomizable === "true";
   if (isActive !== undefined) filter.isActive = isActive === "true";
   if (inStock === "true") filter.stock = { $gt: 0 };
   if (minPrice || maxPrice) {
@@ -45,6 +74,25 @@ const getAllProductsService = async (query) => {
     if (maxPrice) filter.finalPrice.$lte = Number(maxPrice);
   }
   if (search) filter.$text = { $search: search };
+
+  // NEW — Size filter (sizeOptions on the product). Accepts a single size
+  // ("54") or a comma-separated list ("50,52,54") from the sidebar
+  // checkboxes; matches a product if ANY of its sizeOptions is in the
+  // requested list.
+  if (size) {
+    const sizes = String(size).split(",").map((s) => s.trim()).filter(Boolean);
+    if (sizes.length > 0) filter.sizeOptions = { $in: sizes };
+  }
+
+  const attributeFilters = Object.entries(rest)
+    .filter(([key, value]) => key.startsWith("attr_") && value)
+    .map(([key, value]) => ({
+      $elemMatch: { name: key.replace("attr_", ""), value },
+    }));
+
+  if (attributeFilters.length > 0) {
+    filter.attributes = { $all: attributeFilters };
+  }
 
   const pageNum = Math.max(parseInt(page, 10), 1);
   const limitNum = Math.max(parseInt(limit, 10), 1);
@@ -61,17 +109,23 @@ const getAllProductsService = async (query) => {
   };
 };
 
+const CATEGORY_POPULATE = {
+  path: "category",
+  select: "name slug attributes parentCategory",
+  populate: { path: "parentCategory", select: "name slug" },
+};
+
 const getProductByIdService = async (id) => {
   if (!require("mongoose").Types.ObjectId.isValid(id)) {
     throw ApiError.badRequest("Invalid product id");
   }
-  const product = await Product.findById(id).populate("category", "name slug attributes");
+  const product = await Product.findById(id).populate(CATEGORY_POPULATE);
   if (!product) throw ApiError.notFound("Product not found");
   return product;
 };
 
 const getProductBySlugService = async (slug) => {
-  const product = await Product.findOne({ slug }).populate("category", "name slug attributes");
+  const product = await Product.findOne({ slug }).populate(CATEGORY_POPULATE);
   if (!product) throw ApiError.notFound("Product not found");
   return product;
 };
@@ -166,9 +220,6 @@ const toggleStatusService = async (id) => {
 const deleteProductService = async (id) => {
   const product = await Product.findById(id);
   if (!product) throw ApiError.notFound("Product not found");
-
-  // TODO: Order model check karo pending/active order me product hai ya nahi,
-  // agar hai toh hard delete block kar, sirf isActive=false (soft delete) kar.
 
   await Promise.all(product.images.map((img) => deleteImage(extractPublicId(img))));
   await product.deleteOne();

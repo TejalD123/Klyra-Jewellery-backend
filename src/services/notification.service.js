@@ -13,10 +13,12 @@ const Notification = require("../models/notification.model");
  *     relatedId: order._id,
  *   });
  *
- * Same idea for product.controller.js's updateStock (low_stock) and
- * query.controller.js's createQuery (new_query). Wired examples are noted
- * as comments in those files — actual insertion left to you so I'm not
- * editing files you didn't ask me to touch.
+ * Same idea for:
+ *   - order.controller.js's cancelOrder      -> type: "order_cancelled"
+ *   - order.controller.js's requestReturn    -> type: "return_requested"
+ *   - payment.controller.js's on payment fail -> type: "payment_failed"
+ *   - product.controller.js's updateStock    -> type: "low_stock"
+ *   - query.controller.js's createQuery      -> type: "new_query"
  *
  * Deliberately swallows errors: a notification failing to save should
  * never break the order/product/query flow that triggered it.

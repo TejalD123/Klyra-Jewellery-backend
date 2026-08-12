@@ -1,98 +1,83 @@
-const Wishlist = require("./wishlist.model");
+const Wishlist = require("../models/wishlist.model");
+const Product = require("../models/product.model");
+const ApiError = require("../utils/apiError");
 
-/**
- * Get (or lazily create) a user's wishlist, with products populated.
- */
-const getWishlist = async (userId) => {
-  let wishlist = await Wishlist.findOne({ user: userId }).populate({
+// Every function gets-or-creates the user's wishlist doc first — a user's
+// first wishlist action (add/toggle) shouldn't need a separate "create my
+// wishlist" step.
+const getOrCreateWishlist = async (userId) => {
+  let wishlist = await Wishlist.findOne({ user: userId });
+  if (!wishlist) {
+    wishlist = await Wishlist.create({ user: userId, items: [] });
+  }
+  return wishlist;
+};
+
+const getWishlistService = async (userId) => {
+  const wishlist = await Wishlist.findOne({ user: userId }).populate({
     path: "items.product",
-    select: "name price images slug stock", // trim to the fields your Product model actually has
+    select: "name slug images finalPrice basePrice discount stock ratings isBestseller isFeatured",
   });
 
-  if (!wishlist) {
-    wishlist = await Wishlist.create({ user: userId, items: [] });
-  }
+  if (!wishlist) return { items: [] };
 
+  // Drop any items whose product was deleted since being wishlisted
+  // (populate leaves them as null) instead of crashing the frontend on them.
+  return { items: wishlist.items.filter((item) => item.product) };
+};
+
+const addToWishlistService = async (userId, productId) => {
+  const product = await Product.findById(productId);
+  if (!product) throw ApiError.notFound("Product not found");
+
+  const wishlist = await getOrCreateWishlist(userId);
+  const alreadyIn = wishlist.items.some((item) => item.product.toString() === productId);
+  if (!alreadyIn) {
+    wishlist.items.push({ product: productId });
+    await wishlist.save();
+  }
   return wishlist;
 };
 
-/**
- * Add a product to the wishlist. No-op (idempotent) if it's already there.
- */
-const addToWishlist = async (userId, productId) => {
-  let wishlist = await Wishlist.findOne({ user: userId });
-
-  if (!wishlist) {
-    wishlist = await Wishlist.create({ user: userId, items: [] });
-  }
-
-  if (wishlist.hasProduct(productId)) {
-    return wishlist.populate({ path: "items.product", select: "name price images slug stock" });
-  }
-
-  wishlist.items.push({ product: productId });
+const removeFromWishlistService = async (userId, productId) => {
+  const wishlist = await getOrCreateWishlist(userId);
+  wishlist.items = wishlist.items.filter((item) => item.product.toString() !== productId);
   await wishlist.save();
-
-  return wishlist.populate({ path: "items.product", select: "name price images slug stock" });
-};
-
-/**
- * Remove a single product from the wishlist.
- */
-const removeFromWishlist = async (userId, productId) => {
-  const wishlist = await Wishlist.findOneAndUpdate(
-    { user: userId },
-    { $pull: { items: { product: productId } } },
-    { new: true }
-  ).populate({ path: "items.product", select: "name price images slug stock" });
-
   return wishlist;
 };
 
-/**
- * Toggle a product in/out of the wishlist — handy for a single heart button.
- * Returns the updated wishlist plus whether the product ended up added or removed.
- */
-const toggleWishlist = async (userId, productId) => {
-  let wishlist = await Wishlist.findOne({ user: userId });
+// Returns { inWishlist: boolean } so the frontend knows which state the
+// heart icon should end up in, without needing a second GET.
+const toggleWishlistService = async (userId, productId) => {
+  const product = await Product.findById(productId);
+  if (!product) throw ApiError.notFound("Product not found");
 
-  if (!wishlist) {
-    wishlist = await Wishlist.create({ user: userId, items: [] });
-  }
+  const wishlist = await getOrCreateWishlist(userId);
+  const existingIndex = wishlist.items.findIndex((item) => item.product.toString() === productId);
 
-  const alreadyExists = wishlist.hasProduct(productId);
-
-  if (alreadyExists) {
-    wishlist.items = wishlist.items.filter(
-      (item) => item.product.toString() !== productId.toString()
-    );
+  let inWishlist;
+  if (existingIndex >= 0) {
+    wishlist.items.splice(existingIndex, 1);
+    inWishlist = false;
   } else {
     wishlist.items.push({ product: productId });
+    inWishlist = true;
   }
-
   await wishlist.save();
-  await wishlist.populate({ path: "items.product", select: "name price images slug stock" });
-
-  return { wishlist, added: !alreadyExists };
+  return { inWishlist };
 };
 
-/**
- * Clear the entire wishlist.
- */
-const clearWishlist = async (userId) => {
-  const wishlist = await Wishlist.findOneAndUpdate(
-    { user: userId },
-    { $set: { items: [] } },
-    { new: true, upsert: true }
-  );
-
+const clearWishlistService = async (userId) => {
+  const wishlist = await getOrCreateWishlist(userId);
+  wishlist.items = [];
+  await wishlist.save();
   return wishlist;
 };
 
 module.exports = {
-  getWishlist,
-  addToWishlist,
-  removeFromWishlist,
-  toggleWishlist,
-  clearWishlist,
+  getWishlistService,
+  addToWishlistService,
+  removeFromWishlistService,
+  toggleWishlistService,
+  clearWishlistService,
 };

@@ -1,6 +1,6 @@
 const Banner = require("../models/banner.model");
-const cloudinary = require("../config/cloudinary.config");
 const ApiError = require("../utils/apiError");
+const { uploadImageBuffer, deleteImage } = require("./cloudinary.service");
 
 const getActiveBannersService = async (type) => {
   const query = { isActive: true };
@@ -23,6 +23,15 @@ const createBannerService = async ({ body, file }) => {
     throw new ApiError(400, "Image is required for hero banners.");
   }
 
+  let imageUrl = "";
+  let imagePublicId = undefined;
+
+  if (file) {
+    const result = await uploadImageBuffer(file.buffer, "banners");
+    imageUrl = result.secure_url;
+    imagePublicId = result.public_id;
+  }
+
   return Banner.create({
     type,
     title,
@@ -33,8 +42,8 @@ const createBannerService = async ({ body, file }) => {
     displayOrder: displayOrder || 0,
     startDate: startDate || null,
     endDate: endDate || null,
-    image: file?.path || undefined,
-    imagePublicId: file?.filename || undefined,
+    image: imageUrl || undefined,
+    imagePublicId,
   });
 };
 
@@ -52,10 +61,11 @@ const updateBannerService = async (id, body, file) => {
 
   if (file) {
     if (banner.imagePublicId) {
-      await cloudinary.uploader.destroy(banner.imagePublicId).catch(() => {});
+      await deleteImage(banner.imagePublicId);
     }
-    banner.image = file.path;
-    banner.imagePublicId = file.filename;
+    const result = await uploadImageBuffer(file.buffer, "banners");
+    banner.image = result.secure_url;
+    banner.imagePublicId = result.public_id;
   }
 
   await banner.save();
@@ -76,7 +86,7 @@ const deleteBannerService = async (id) => {
   if (!banner) throw new ApiError(404, "Banner not found.");
 
   if (banner.imagePublicId) {
-    await cloudinary.uploader.destroy(banner.imagePublicId).catch(() => {});
+    await deleteImage(banner.imagePublicId);
   }
   await banner.deleteOne();
 };

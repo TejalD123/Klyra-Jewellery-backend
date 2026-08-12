@@ -1,18 +1,16 @@
 const express = require("express");
-const router = express.Router();
-
 const {
   getWishlist,
   addToWishlist,
   removeFromWishlist,
   toggleWishlist,
   clearWishlist,
-} = require("./wishlist.controller");
+} = require("../controller/wishlist.controller");
+const { protect } = require("../middleware/auth.middleware");
 
-// Adjust this import to match your actual auth middleware location/name
-const { protect } = require("../../middlewares/auth.middleware");
+const router = express.Router();
 
-// All wishlist routes require a logged-in user
+// Every wishlist route needs a logged-in user — there's no "guest wishlist".
 router.use(protect);
 
 router.get("/", getWishlist);

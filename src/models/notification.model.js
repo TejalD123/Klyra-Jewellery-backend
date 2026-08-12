@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 // type, so adding a new notification type later never needs a schema change.
 const NOTIFICATION_TYPES = [
   "new_order",
+  "order_cancelled",
   "low_stock",
   "return_requested",
   "payment_failed",
@@ -62,4 +63,10 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ recipientRole: 1, isRead: 1, createdAt: -1 });
 
-module.exports = mongoose.model("Notification", notificationSchema);
+const Notification = mongoose.model("Notification", notificationSchema);
+
+// Attached as a static so validation middleware / controllers can import
+// the same list instead of redefining it (single source of truth).
+Notification.NOTIFICATION_TYPES = NOTIFICATION_TYPES;
+
+module.exports = Notification;

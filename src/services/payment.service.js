@@ -1,5 +1,6 @@
 const Payment = require("../models/Payment.model");
 const Order = require("../models/order.model");
+const ApiError = require("../utils/apiError");
 const {
   createRazorpayOrder,
   verifyPaymentSignature,
@@ -8,11 +9,9 @@ const {
 
 const createPaymentOrderService = async ({ orderId, paymentMethod, userId }) => {
   const order = await Order.findById(orderId);
-  if (!order) {
-    const err = new Error("Order not found");
-    err.statusCode = 404;
-    throw err;
-  }
+  if (!order) throw ApiError.notFound("Order not found");
+  if (order.user.toString() !== userId) throw ApiError.forbidden("Access denied");
+  if (order.paymentStatus === "paid") throw ApiError.badRequest("This order is already paid for");
 
   if (paymentMethod === "cod") {
     const payment = await Payment.create({
@@ -23,7 +22,7 @@ const createPaymentOrderService = async ({ orderId, paymentMethod, userId }) => 
       gateway: "cod",
       status: "created",
     });
-    return { isCod: true, payment };
+    return { isCod: true, payment, orderId: order._id };
   }
 
   const razorpayOrder = await createRazorpayOrder(order.pricing.totalAmount, order.orderNumber);
@@ -45,6 +44,7 @@ const createPaymentOrderService = async ({ orderId, paymentMethod, userId }) => 
     currency: razorpayOrder.currency,
     key: process.env.RAZORPAY_KEY_ID,
     paymentId: payment._id,
+    orderId: order._id,
   };
 };
 
@@ -64,6 +64,7 @@ const verifyPaymentService = async ({ razorpayOrderId, razorpayPaymentId, razorp
     { razorpayPaymentId, razorpaySignature, status: "captured" },
     { new: true }
   );
+  if (!payment) throw ApiError.notFound("Payment record not found for this order");
 
   await Order.findByIdAndUpdate(orderId, {
     paymentStatus: "paid",
@@ -76,17 +77,8 @@ const verifyPaymentService = async ({ razorpayOrderId, razorpayPaymentId, razorp
 
 const processRefundService = async (paymentId, { amount, reason }) => {
   const payment = await Payment.findById(paymentId);
-  if (!payment) {
-    const err = new Error("Payment not found");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  if (payment.gateway === "cod") {
-    const err = new Error("Cash on Delivery orders cannot be refunded online");
-    err.statusCode = 400;
-    throw err;
-  }
+  if (!payment) throw ApiError.notFound("Payment not found");
+  if (payment.gateway === "cod") throw ApiError.badRequest("Cash on Delivery orders cannot be refunded online");
 
   const refund = await initiateRefund(payment.razorpayPaymentId, amount, reason);
 
@@ -101,11 +93,7 @@ const processRefundService = async (paymentId, { amount, reason }) => {
 
 const getPaymentByIdService = async (paymentId) => {
   const payment = await Payment.findById(paymentId).populate("order");
-  if (!payment) {
-    const err = new Error("Payment not found");
-    err.statusCode = 404;
-    throw err;
-  }
+  if (!payment) throw ApiError.notFound("Payment not found");
   return payment;
 };
 

@@ -3,13 +3,72 @@ const Order = require("../models/order.model");
 const Cart = require("../models/cart.model");
 const Product = require("../models/product.model");
 const Address = require("../models/address.model");
+const DeliveryAgency = require("../models/deliveryAgency.model");
 const ApiError = require("../utils/apiError");
+const { notifyAdmins } = require("./notification.service");
 
 // Simple shipping-charge rule: free above ₹2000, else flat ₹99.
 const calculateShippingCharge = (subtotal) => (subtotal >= 2000 ? 0 : 99);
 
 // Statuses at which a whole order (or an individual item) can still be cancelled
-const CANCELLABLE_ORDER_STATUSES = ["placed", "confirmed", "processing"];
+const CANCELLABLE_ORDER_STATUSES = ["placed", "confirmed", "processing", "packed"];
+
+// How long each delivery stage lasts before auto-advancing. 2 minutes for a
+// live demo — swap this one number for something like 2 days in production.
+const DELIVERY_STAGE_DURATION_MS = 2 * 60 * 1000;
+
+const assignDeliveryService = async (orderId, deliveryAgencyId) => {
+  // TEMP DEBUG — will show up directly in the browser's alert/response
+  console.log(">>> assignDeliveryService called with:", { orderId, deliveryAgencyId });
+
+  const agency = await DeliveryAgency.findById(deliveryAgencyId);
+
+  console.log(">>> DeliveryAgency.findById result:", agency);
+
+  if (!agency || !agency.isActive) {
+    throw ApiError.badRequest(
+      `DEBUGXYZ received id="${deliveryAgencyId}" type=${typeof deliveryAgencyId} agencyFound=${!!agency} isActive=${agency ? agency.isActive : "N/A"}`
+    );
+  }
+
+  const order = await Order.findById(orderId);
+  if (!order) throw ApiError.notFound("Order not found");
+  if (order.cancellation?.isCancelled) throw ApiError.badRequest("Cannot update a cancelled order");
+
+  const charge = agency.getRateForState(order.shippingAddress?.state);
+
+  order.orderStatus = "shipped";
+  order.deliveryAgencyId = agency._id;
+  order.deliveryAgency = agency.name;
+  order.deliveryCharge = charge;
+  order.stageStartedAt = new Date();
+  await order.save();
+  return order;
+};
+
+// Demo "live tracking" — no cron job needed. Every time an order is read
+// (admin list, user list, order detail), check whether enough time has
+// passed in its current delivery stage and auto-advance it if so.
+const autoAdvanceDeliveryStatus = async (order) => {
+  if (!order || !order.stageStartedAt) return order;
+  if (!["shipped", "out_for_delivery"].includes(order.orderStatus)) return order;
+
+  const elapsed = Date.now() - new Date(order.stageStartedAt).getTime();
+  if (elapsed < DELIVERY_STAGE_DURATION_MS) return order;
+
+  if (order.orderStatus === "shipped") {
+    order.orderStatus = "out_for_delivery";
+    order.stageStartedAt = new Date();
+  } else if (order.orderStatus === "out_for_delivery") {
+    order.orderStatus = "delivered";
+    order.stageStartedAt = null;
+  }
+
+  await order.save();
+  return order;
+};
+
+const autoAdvanceMany = (orders) => Promise.all(orders.map(autoAdvanceDeliveryStatus));
 
 const findOwnedOrder = async (orderId, userId, role) => {
   const order = await Order.findById(orderId);
@@ -19,7 +78,7 @@ const findOwnedOrder = async (orderId, userId, role) => {
   const isAdmin = role === "admin";
   if (!isOwner && !isAdmin) throw ApiError.forbidden("Access denied");
 
-  return order;
+  return autoAdvanceDeliveryStatus(order);
 };
 
 const createOrderService = async (userId, { addressId, paymentMethod, couponDiscount = 0 }) => {
@@ -107,6 +166,14 @@ const createOrderService = async (userId, { addressId, paymentMethod, couponDisc
     session.endSession();
   }
 
+  await notifyAdmins({
+    type: "new_order",
+    title: "New order placed",
+    message: `${order.orderNumber} — ₹${order.pricing.totalAmount}`,
+    relatedModel: "Order",
+    relatedId: order._id,
+  });
+
   return order;
 };
 
@@ -121,6 +188,8 @@ const getMyOrdersService = async (userId, { orderStatus, page = 1, limit = 10 })
     Order.find(filter).sort("-createdAt").skip((pageNum - 1) * limitNum).limit(limitNum),
     Order.countDocuments(filter),
   ]);
+
+  await autoAdvanceMany(orders);
 
   return {
     orders,
@@ -141,7 +210,7 @@ const getOrderByOrderNumberService = async (orderNumber, userId, role) => {
   const isAdmin = role === "admin";
   if (!isOwner && !isAdmin) throw ApiError.forbidden("Access denied");
 
-  return order;
+  return autoAdvanceDeliveryStatus(order);
 };
 
 const cancelOrderService = async (orderId, userId, role, reason = "") => {
@@ -176,6 +245,15 @@ const cancelOrderService = async (orderId, userId, role, reason = "") => {
   });
 
   await order.save();
+
+  await notifyAdmins({
+    type: "order_cancelled",
+    title: "Order cancelled",
+    message: `${order.orderNumber} was cancelled by ${role === "admin" ? "admin" : "the customer"}${reason ? ` — ${reason}` : ""}`,
+    relatedModel: "Order",
+    relatedId: order._id,
+  });
+
   return order;
 };
 
@@ -224,6 +302,17 @@ const cancelOrderItemService = async (orderId, itemId, userId, role, reason = ""
   });
 
   await order.save();
+
+  if (allCancelled) {
+    await notifyAdmins({
+      type: "order_cancelled",
+      title: "Order cancelled",
+      message: `${order.orderNumber} was cancelled (all items) by ${role === "admin" ? "admin" : "the customer"}`,
+      relatedModel: "Order",
+      relatedId: order._id,
+    });
+  }
+
   return order;
 };
 
@@ -242,6 +331,15 @@ const requestItemReturnService = async (orderId, itemId, userId, role, reason) =
   order.statusHistory.push({ status: "return_requested", timestamp: new Date(), note: reason });
 
   await order.save();
+
+  await notifyAdmins({
+    type: "return_requested",
+    title: "Return requested",
+    message: `${order.orderNumber} — return requested for "${item.name}"`,
+    relatedModel: "Order",
+    relatedId: order._id,
+  });
+
   return order;
 };
 
@@ -305,6 +403,8 @@ const getAllOrdersService = async ({
     Order.countDocuments(filter),
   ]);
 
+  await autoAdvanceMany(orders);
+
   return {
     orders,
     pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
@@ -337,6 +437,17 @@ const updatePaymentStatusService = async (orderId, paymentStatus) => {
 
   order.paymentStatus = paymentStatus;
   await order.save();
+
+  if (paymentStatus === "failed") {
+    await notifyAdmins({
+      type: "payment_failed",
+      title: "Payment failed",
+      message: `Payment failed for order ${order.orderNumber}`,
+      relatedModel: "Order",
+      relatedId: order._id,
+    });
+  }
+
   return order;
 };
 
@@ -352,4 +463,5 @@ module.exports = {
   getAllOrdersService,
   updateOrderStatusService,
   updatePaymentStatusService,
+  assignDeliveryService,
 };

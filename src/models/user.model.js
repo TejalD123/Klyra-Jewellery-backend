@@ -32,8 +32,7 @@ const userSchema = new mongoose.Schema(
     phone: {
       type: String,
       trim: true,
-      unique: true,
-      sparse: true,
+      // unique: true,   <-- removed: same phone number can now be linked to multiple accounts (e.g. different Google logins)
     },
     isEmailVerified: {
       type: Boolean,

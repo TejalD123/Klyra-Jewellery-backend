@@ -1,8 +1,9 @@
 const Joi = require("joi");
 
 const createPaymentOrderSchema = Joi.object({
-  orderId: Joi.string().required(), // aapka Order model ka _id
-  paymentMethod: Joi.string().valid("card", "upi", "cod", "netbanking").required(),
+  orderId: Joi.string().required(),
+  // aligned with order.model.js's paymentMethod enum — no "netbanking" there
+  paymentMethod: Joi.string().valid("card", "upi", "cod").required(),
 });
 
 const verifyPaymentSchema = Joi.object({

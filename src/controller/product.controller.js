@@ -18,7 +18,9 @@ const createProduct = asyncHandler(async (req, res) => {
   const product = await createProductService({
     body: req.body,
     files: req.files,
-    userId: req.user?.id,
+    // same fix as category.controller.js — some auth middleware setups
+    // attach `_id`, not `id`, so try both.
+    userId: req.user?._id || req.user?.id,
   });
   return res.status(201).json(new ApiResponse(201, product, "Product created successfully"));
 });

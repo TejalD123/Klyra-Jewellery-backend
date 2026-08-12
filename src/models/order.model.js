@@ -119,11 +119,36 @@ const orderSchema = new mongoose.Schema(
         "placed",
         "confirmed",
         "processing",
+        "packed",
         "shipped",
+        "out_for_delivery",
         "delivered",
         "cancelled",
       ],
       default: "placed",
+    },
+    // Dummy delivery-partner tracking (demo only — no real courier integration).
+    // deliveryAgency/deliveryCharge are snapshots taken at assignment time —
+    // they stay accurate even if the agency's rates change later.
+    deliveryAgencyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DeliveryAgency",
+      default: null,
+    },
+    deliveryAgency: {
+      type: String,
+      default: null,
+    },
+    deliveryCharge: {
+      type: Number,
+      default: null,
+    },
+    // Timestamp the CURRENT delivery stage ("shipped" or "out_for_delivery")
+    // started — used to auto-advance the status after a short demo timer,
+    // checked lazily whenever the order is read (see order.service.js).
+    stageStartedAt: {
+      type: Date,
+      default: null,
     },
     statusHistory: {
       type: [statusHistorySchema],
@@ -142,7 +167,7 @@ orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ paymentStatus: 1 });
 
 // Auto-generate a gap-free, human-friendly order number: ORD-<year>-00001
-orderSchema.pre("save", async function (next) {
+orderSchema.pre("save", async function () {
   if (this.isNew && !this.orderNumber) {
     const year = new Date().getFullYear();
     const counterId = `order-${year}`;
@@ -161,8 +186,6 @@ orderSchema.pre("save", async function (next) {
   if (this.isNew || this.isModified("orderStatus")) {
     this.statusHistory.push({ status: this.orderStatus, timestamp: new Date() });
   }
-
-  next();
 });
 
 const Order = mongoose.model("Order", orderSchema);

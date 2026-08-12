@@ -1,91 +1,42 @@
-const mongoose = require("mongoose");
-const wishlistService = require("./wishlist.service");
+const ApiResponse = require("../utils/apiResponse");
+const asyncHandler = require("../utils/asyncHandler");
+const {
+  getWishlistService,
+  addToWishlistService,
+  removeFromWishlistService,
+  toggleWishlistService,
+  clearWishlistService,
+} = require("../services/wishlist.service");
 
-const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
+// same _id/id fallback pattern used in category.controller.js / product.controller.js
+const getUserId = (req) => req.user?._id || req.user?.id;
 
-/**
- * GET /api/wishlist
- */
-const getWishlist = async (req, res) => {
-  try {
-    const wishlist = await wishlistService.getWishlist(req.user._id);
-    return res.status(200).json({ success: true, data: wishlist });
-  } catch (err) {
-    console.error("getWishlist error:", err);
-    return res.status(500).json({ success: false, message: "Failed to fetch wishlist" });
-  }
-};
+const getWishlist = asyncHandler(async (req, res) => {
+  const wishlist = await getWishlistService(getUserId(req));
+  return res.status(200).json(new ApiResponse(200, wishlist));
+});
 
-/**
- * POST /api/wishlist/:productId
- */
-const addToWishlist = async (req, res) => {
-  try {
-    const { productId } = req.params;
+const addToWishlist = asyncHandler(async (req, res) => {
+  const wishlist = await addToWishlistService(getUserId(req), req.params.productId);
+  return res.status(200).json(new ApiResponse(200, wishlist, "Added to wishlist"));
+});
 
-    if (!isValidObjectId(productId)) {
-      return res.status(400).json({ success: false, message: "Invalid product id" });
-    }
+const removeFromWishlist = asyncHandler(async (req, res) => {
+  const wishlist = await removeFromWishlistService(getUserId(req), req.params.productId);
+  return res.status(200).json(new ApiResponse(200, wishlist, "Removed from wishlist"));
+});
 
-    const wishlist = await wishlistService.addToWishlist(req.user._id, productId);
-    return res.status(200).json({ success: true, data: wishlist });
-  } catch (err) {
-    console.error("addToWishlist error:", err);
-    return res.status(500).json({ success: false, message: "Failed to add product to wishlist" });
-  }
-};
+const toggleWishlist = asyncHandler(async (req, res) => {
+  const result = await toggleWishlistService(getUserId(req), req.params.productId);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, result.inWishlist ? "Added to wishlist" : "Removed from wishlist"));
+});
 
-/**
- * DELETE /api/wishlist/:productId
- */
-const removeFromWishlist = async (req, res) => {
-  try {
-    const { productId } = req.params;
-
-    if (!isValidObjectId(productId)) {
-      return res.status(400).json({ success: false, message: "Invalid product id" });
-    }
-
-    const wishlist = await wishlistService.removeFromWishlist(req.user._id, productId);
-    return res.status(200).json({ success: true, data: wishlist });
-  } catch (err) {
-    console.error("removeFromWishlist error:", err);
-    return res.status(500).json({ success: false, message: "Failed to remove product from wishlist" });
-  }
-};
-
-/**
- * POST /api/wishlist/toggle/:productId
- * Used by the heart button — adds if absent, removes if present.
- */
-const toggleWishlist = async (req, res) => {
-  try {
-    const { productId } = req.params;
-
-    if (!isValidObjectId(productId)) {
-      return res.status(400).json({ success: false, message: "Invalid product id" });
-    }
-
-    const { wishlist, added } = await wishlistService.toggleWishlist(req.user._id, productId);
-    return res.status(200).json({ success: true, added, data: wishlist });
-  } catch (err) {
-    console.error("toggleWishlist error:", err);
-    return res.status(500).json({ success: false, message: "Failed to update wishlist" });
-  }
-};
-
-/**
- * DELETE /api/wishlist
- */
-const clearWishlist = async (req, res) => {
-  try {
-    const wishlist = await wishlistService.clearWishlist(req.user._id);
-    return res.status(200).json({ success: true, data: wishlist });
-  } catch (err) {
-    console.error("clearWishlist error:", err);
-    return res.status(500).json({ success: false, message: "Failed to clear wishlist" });
-  }
-};
+const clearWishlist = asyncHandler(async (req, res) => {
+  await clearWishlistService(getUserId(req));
+  return res.status(200).json(new ApiResponse(200, null, "Wishlist cleared"));
+});
 
 module.exports = {
   getWishlist,

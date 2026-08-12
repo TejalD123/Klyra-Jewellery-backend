@@ -38,9 +38,26 @@ const categorySchema = new mongoose.Schema(
       maxlength: 1000,
     },
     image: {
+      type: String, // cloudinary URL — used for card/thumbnail grids
+      default: "",
+    },
+    // ---- NEW: poster feature -----------------------------------------
+    // Full-width hero banner shown on the category / subcategory listing
+    // pages (the "Earrings" banner in the screenshot). Two separate
+    // images because the desktop crop and the mobile crop show a
+    // different part of the same artwork (mobile is cropped tighter so
+    // only the jewellery, not the whole scene, is visible). Text is NOT
+    // baked into these images — any title/description shown on top is
+    // rendered by the frontend as an overlay, same as before.
+    posterDesktop: {
       type: String, // cloudinary URL
       default: "",
     },
+    posterMobile: {
+      type: String, // cloudinary URL
+      default: "",
+    },
+    // --------------------------------------------------------------------
     parentCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
@@ -88,15 +105,15 @@ function slugify(text) {
 }
 
 // Auto-generate slug from name whenever name changes
-categorySchema.pre("save", async function (next) {
-  if (!this.isModified("name")) return next();
+// NOTE: this is an ASYNC pre-save hook — do NOT declare/call `next` here.
+categorySchema.pre("save", async function () {
+  if (!this.isModified("name")) return;
 
   let baseSlug = slugify(this.name);
   let uniqueSlug = baseSlug;
   let counter = 1;
 
   const CategoryModel = this.constructor;
-  // Ensure slug uniqueness (append -1, -2, ... if collision)
   while (
     await CategoryModel.findOne({
       slug: uniqueSlug,
@@ -108,7 +125,6 @@ categorySchema.pre("save", async function (next) {
   }
 
   this.slug = uniqueSlug;
-  next();
 });
 
 module.exports = mongoose.model("Category", categorySchema);

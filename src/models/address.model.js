@@ -75,14 +75,13 @@ addressSchema.index({ user: 1, isDefault: 1 });
 // Ensure only ONE default address per user.
 // Jevha ha address isDefault=true set hoto, tevha same user chya
 // baki sagळ्या addresses cha isDefault false kela jato.
-addressSchema.pre("save", async function (next) {
+addressSchema.pre("save", async function () {
   if (this.isModified("isDefault") && this.isDefault === true) {
     await this.constructor.updateMany(
       { user: this.user, _id: { $ne: this._id } },
       { $set: { isDefault: false } }
     );
   }
-  next();
 });
 
 module.exports = mongoose.model("Address", addressSchema);

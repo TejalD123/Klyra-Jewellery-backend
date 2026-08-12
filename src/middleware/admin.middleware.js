@@ -22,7 +22,7 @@ const productValidator = [
 
 const orderStatusValidator = [
   body("orderStatus")
-    .isIn(["placed", "confirmed", "processing", "shipped", "delivered", "cancelled"])
+    .isIn(["placed", "confirmed", "processing", "packed", "shipped", "out_for_delivery", "delivered", "cancelled"])
     .withMessage("Invalid order status"),
 ];
 

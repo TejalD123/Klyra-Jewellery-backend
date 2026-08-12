@@ -15,8 +15,12 @@ const {
 const createCategory = asyncHandler(async (req, res) => {
   const category = await createCategoryService({
     body: req.body,
-    file: req.file,
-    userId: req.user?.id,
+    // CHANGED: req.file -> req.files. Since routes now use
+    // upload.uploadCategoryImages (upload.fields), Multer puts the
+    // uploaded files on req.files as { image: [...], posterDesktop: [...],
+    // posterMobile: [...] } instead of a single req.file.
+    files: req.files,
+    userId: req.user?._id || req.user?.id,
   });
   return res.status(201).json(new ApiResponse(201, category, "Category created successfully"));
 });
@@ -50,7 +54,8 @@ const updateCategory = asyncHandler(async (req, res) => {
   const category = await updateCategoryService({
     id: req.params.id,
     body: req.body,
-    file: req.file,
+    // CHANGED: same as createCategory above
+    files: req.files,
   });
   return res.status(200).json(new ApiResponse(200, category, "Category updated successfully"));
 });

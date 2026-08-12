@@ -38,8 +38,9 @@ const generateUsername = (seed) => {
 
 // ---------------------------------------------------------------------
 // REGISTER
-//   Email path -> { fullName, email }             (2-step: OTP sent, verified later)
-//   Phone path -> { fullName, phone, idToken }     (1-step: Firebase already verified)
+//   Google path -> { idToken, provider: "google" }        (already verified by Firebase)
+//   Phone path  -> { fullName, phone, idToken }            (1-step: Firebase already verified)
+//   Email path  -> { fullName, email }                     (2-step: OTP sent, verified later)
 // ---------------------------------------------------------------------
 const register = asyncHandler(async (req, res) => {
   const { idToken, phone, fullName, email, username, provider } = req.body;
@@ -87,11 +88,70 @@ const register = asyncHandler(async (req, res) => {
     }
 
     let user = await User.findOne({ phone });
-    // ... baaki phone logic same
+
+    if (user && user.isPhoneVerified) {
+      const session = await issueAuthSession(user, res);
+      return res
+        .status(200)
+        .json(new ApiResponse(200, session, "Login successful."));
+    }
+
+    if (!user) {
+      user = await User.create({
+        fullName,
+        username: username || generateUsername(phone),
+        phone,
+        isPhoneVerified: true,
+      });
+    } else {
+      user.isPhoneVerified = true;
+      await user.save();
+    }
+
+    const session = await issueAuthSession(user, res);
+    return res
+      .status(201)
+      .json(new ApiResponse(201, session, "Registration successful."));
   }
 
-  // ===== Email registration =====
-  // ... same
+  // ===== Email registration (2-step: create unverified user, send OTP) =====
+  if (!email) {
+    throw new ApiError(400, "Email or a verified phone/Google token is required.");
+  }
+  if (!fullName) {
+    throw new ApiError(400, "Full name is required.");
+  }
+
+  let user = await User.findOne({ email });
+
+  if (user && user.isEmailVerified) {
+    throw new ApiError(409, "An account with this email already exists. Please log in instead.");
+  }
+
+  if (!user) {
+    // Not verified yet, so it's safe to create — verifyRegistrationOtp will
+    // flip isEmailVerified to true once the OTP is confirmed.
+    user = await User.create({
+      fullName,
+      username: username || generateUsername(email),
+      email,
+      isEmailVerified: false,
+    });
+  }
+  // else: user already exists but never verified — just resend the OTP below,
+  // no need to create a duplicate record.
+
+  await createAndSendOtp(email, "registration");
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        { channel: "email", email },
+        "An OTP has been sent to your email. Please verify to complete registration.",
+      ),
+    );
 });
 
 // ---------------------------------------------------------------------

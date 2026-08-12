@@ -33,11 +33,13 @@ router.get("/:id", getCategoryById);
 router.get("/:id/subcategories", getSubcategories);
 
 // ---------- Admin-only routes ----------
+// CHANGED: upload.single("image") -> upload.uploadCategoryImages
+// so image + posterDesktop + posterMobile all come through in one request.
 router.post(
   "/",
   protect,
   restrictTo("admin"),
-  upload.single("image"),
+  upload.uploadCategoryImages,
   validateSchema(createCategorySchema),
   createCategory
 );
@@ -46,7 +48,7 @@ router.put(
   "/:id",
   protect,
   restrictTo("admin"),
-  upload.single("image"),
+  upload.uploadCategoryImages,
   validateSchema(updateCategorySchema),
   updateCategory
 );

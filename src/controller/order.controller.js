@@ -1,5 +1,6 @@
 const ApiResponse = require("../utils/apiResponse");
 const asyncHandler = require("../utils/asyncHandler");
+const { sendOrderConfirmationEmail } = require("../services/email.service");
 const {
   createOrderService,
   getMyOrdersService,
@@ -12,10 +13,20 @@ const {
   getAllOrdersService,
   updateOrderStatusService,
   updatePaymentStatusService,
+  assignDeliveryService,
 } = require("../services/order.service");
 
 const createOrder = asyncHandler(async (req, res) => {
   const order = await createOrderService(req.user.id, req.body);
+
+  // Don't let an email failure break the order-placed response —
+  // order is already saved in DB at this point, just log and move on.
+  try {
+    await sendOrderConfirmationEmail(req.user.email, order);
+  } catch (err) {
+    console.error("Order confirmation email failed:", err.message);
+  }
+
   return res.status(201).json(new ApiResponse(201, order, "Order placed successfully"));
 });
 
@@ -75,6 +86,14 @@ const updatePaymentStatus = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, order, "Payment status updated"));
 });
 
+// ===== Dummy delivery tracking (demo only) =====
+const assignDelivery = asyncHandler(async (req, res) => {
+  console.log("DEBUG assign-delivery req.body:", req.body); // TEMP — remove after debugging
+  console.log("DEBUG assign-delivery req.params.id:", req.params.id); // TEMP — remove after debugging
+  const order = await assignDeliveryService(req.params.id, req.body.deliveryAgencyId);
+  return res.status(200).json(new ApiResponse(200, order, "Order shipped and assigned for delivery"));
+});
+
 module.exports = {
   createOrder,
   getMyOrders,
@@ -87,4 +106,5 @@ module.exports = {
   getAllOrders,
   updateOrderStatus,
   updatePaymentStatus,
+  assignDelivery,
 };

@@ -9,10 +9,18 @@ const {
 } = require("../controller/payment.controller");
 
 const { protect, restrictTo } = require("../middleware/auth.middleware");
+const { validateSchema } = require("../middleware/validation.middleware");
+const {
+  createPaymentOrderSchema,
+  verifyPaymentSchema,
+  refundRequestSchema,
+} = require("../validations/payment.validation");
 
-router.post("/create", protect, createPaymentOrder);
-router.post("/verify", protect, verifyPayment);
-router.get("/:paymentId", protect, getPaymentById);
-router.post("/:paymentId/refund", protect, restrictTo("admin"), processRefund); // sirf admin refund kar sake
+router.use(protect);
+
+router.post("/create", validateSchema(createPaymentOrderSchema), createPaymentOrder);
+router.post("/verify", validateSchema(verifyPaymentSchema), verifyPayment);
+router.get("/:paymentId", getPaymentById);
+router.post("/:paymentId/refund", restrictTo("admin"), validateSchema(refundRequestSchema), processRefund);
 
 module.exports = router;
