@@ -3,7 +3,7 @@ const Order = require("../models/order.model");
 const Cart = require("../models/cart.model");
 const Product = require("../models/product.model");
 const Address = require("../models/address.model");
-const DeliveryAgency = require("../models/deliveryAgency.model");
+const DeliveryAgency = require("../models/deliveryagency.model");
 const ApiError = require("../utils/apiError");
 const { notifyAdmins } = require("./notification.service");
 

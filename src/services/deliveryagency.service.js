@@ -1,4 +1,4 @@
-const DeliveryAgency = require("../models/deliveryAgency.model");
+const DeliveryAgency = require("../models/deliveryagency.model");
 const ApiError = require("../utils/apiError");
 const { uploadImageBuffer, deleteImage } = require("./cloudinary.service");
 
