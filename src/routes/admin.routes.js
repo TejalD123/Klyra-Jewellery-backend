@@ -16,7 +16,7 @@ const {
   updateDeliveryAgency,
   toggleDeliveryAgencyStatus,
   deleteDeliveryAgency,
-} = require("../controller/deliveryAgency.controller");
+} = require("../controller/deliveryagency.controller");
 
 const {
   createCategory,
