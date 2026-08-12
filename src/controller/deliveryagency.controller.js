@@ -8,7 +8,7 @@ const {
   updateDeliveryAgencyService,
   toggleDeliveryAgencyStatusService,
   deleteDeliveryAgencyService,
-} = require("../services/deliveryAgency.service");
+} = require("../services/deliveryagency.service");
 
 const createDeliveryAgency = asyncHandler(async (req, res) => {
   const agency = await createDeliveryAgencyService({ body: req.body, file: req.file });
