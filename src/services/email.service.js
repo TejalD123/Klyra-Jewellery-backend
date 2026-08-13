@@ -1,20 +1,15 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 const ApiError = require("../utils/apiError");
 
 /**
- * Reusable Nodemailer transporter, configured from environment variables.
- * Works with any SMTP provider (Gmail, SendGrid, Mailtrap, AWS SES, etc).
+ * Resend client, configured from environment variables.
+ * Uses HTTPS (port 443) instead of raw SMTP ports — works reliably on
+ * hosts like Render that block/throttle outbound SMTP (587/465/25).
  */
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: Number(process.env.SMTP_PORT) === 465, // true for port 465, false for others
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-   family: 4, 
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Until you verify your own domain on Resend, you must send from this address.
+const DEFAULT_FROM = "Klyra Jewellery <onboarding@resend.dev>";
 
 /**
  * Returns subject + HTML body for the given OTP purpose.
@@ -64,12 +59,16 @@ const sendOtpEmail = async (toEmail, otp, purpose = "registration") => {
   try {
     const { subject, html } = buildOtpTemplate(otp, purpose);
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"Klyra Jewellery" <no-reply@klyra.com>`,
+    const { error } = await resend.emails.send({
+      from: process.env.SMTP_FROM || DEFAULT_FROM,
       to: toEmail,
       subject,
       html,
     });
+
+    if (error) {
+      throw new Error(error.message || "Resend API error");
+    }
   } catch (error) {
     console.error("Failed to send OTP email:", error.message);
     throw new ApiError(500, "Failed to send OTP email. Please try again later.");
@@ -147,12 +146,16 @@ const sendOrderConfirmationEmail = async (toEmail, order) => {
   try {
     const { subject, html } = buildOrderInvoiceTemplate(order);
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"Klyra Jewellery" <no-reply@klyra.com>`,
+    const { error } = await resend.emails.send({
+      from: process.env.SMTP_FROM || DEFAULT_FROM,
       to: toEmail,
       subject,
       html,
     });
+
+    if (error) {
+      throw new Error(error.message || "Resend API error");
+    }
   } catch (error) {
     console.error("Failed to send order confirmation email:", error.message);
     throw new ApiError(500, "Failed to send order confirmation email.");
