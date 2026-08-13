@@ -24,7 +24,7 @@
     "razorpay": "^2.9.8",
     "redis": "^6.1.0",
     "twilio": "^6.0.2",
-    "resend": "^4.0.0"
+    "resend": "^4.0.0",
     "@getbrevo/brevo": "^2.2.0"
   },
   "devDependencies": {
