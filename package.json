@@ -23,7 +23,8 @@
     "nodemailer": "^9.0.3",
     "razorpay": "^2.9.8",
     "redis": "^6.1.0",
-    "twilio": "^6.0.2"
+    "twilio": "^6.0.2",
+    "resend": "^4.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
