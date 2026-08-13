@@ -1,15 +1,26 @@
-const { Resend } = require("resend");
+const brevo = require("@getbrevo/brevo");
 const ApiError = require("../utils/apiError");
 
 /**
- * Resend client, configured from environment variables.
- * Uses HTTPS (port 443) instead of raw SMTP ports — works reliably on
- * hosts like Render that block/throttle outbound SMTP (587/465/25).
+ * Brevo (Sendinblue) transactional email client, configured from
+ * environment variables. Uses HTTPS (port 443) instead of raw SMTP
+ * ports — works reliably on hosts like Render that block/throttle
+ * outbound SMTP (587/465/25). Unlike Resend's free tier, a verified
+ * sender (not a verified domain) is enough to send to any recipient.
  */
-const resend = new Resend(process.env.RESEND_API_KEY);
+const apiInstance = new brevo.TransactionalEmailsApi();
+apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
-// Until you verify your own domain on Resend, you must send from this address.
-const DEFAULT_FROM = "Klyra Jewellery <onboarding@resend.dev>";
+// Parses a "Name <email@example.com>" string into { name, email } for Brevo's sender field.
+const parseFromAddress = (fromString) => {
+  const match = fromString && fromString.match(/^"?([^"<]*)"?\s*<(.+)>$/);
+  if (match) {
+    return { name: match[1].trim(), email: match[2].trim() };
+  }
+  return { name: "Klyra Jewellery", email: fromString || "tejaldalvi290@gmail.com" };
+};
+
+const SENDER = parseFromAddress(process.env.SMTP_FROM);
 
 /**
  * Returns subject + HTML body for the given OTP purpose.
@@ -59,18 +70,16 @@ const sendOtpEmail = async (toEmail, otp, purpose = "registration") => {
   try {
     const { subject, html } = buildOtpTemplate(otp, purpose);
 
-    const { error } = await resend.emails.send({
-      from: process.env.SMTP_FROM || DEFAULT_FROM,
-      to: toEmail,
-      subject,
-      html,
-    });
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
+    sendSmtpEmail.sender = SENDER;
+    sendSmtpEmail.to = [{ email: toEmail }];
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html;
 
-    if (error) {
-      throw new Error(error.message || "Resend API error");
-    }
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
   } catch (error) {
-    console.error("Failed to send OTP email:", error.message);
+    const message = error.response?.body?.message || error.message;
+    console.error("Failed to send OTP email:", message);
     throw new ApiError(500, "Failed to send OTP email. Please try again later.");
   }
 };
@@ -146,18 +155,16 @@ const sendOrderConfirmationEmail = async (toEmail, order) => {
   try {
     const { subject, html } = buildOrderInvoiceTemplate(order);
 
-    const { error } = await resend.emails.send({
-      from: process.env.SMTP_FROM || DEFAULT_FROM,
-      to: toEmail,
-      subject,
-      html,
-    });
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
+    sendSmtpEmail.sender = SENDER;
+    sendSmtpEmail.to = [{ email: toEmail }];
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html;
 
-    if (error) {
-      throw new Error(error.message || "Resend API error");
-    }
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
   } catch (error) {
-    console.error("Failed to send order confirmation email:", error.message);
+    const message = error.response?.body?.message || error.message;
+    console.error("Failed to send order confirmation email:", message);
     throw new ApiError(500, "Failed to send order confirmation email.");
   }
 };
