@@ -10,10 +10,14 @@ const {
   generateAccessToken,
 } = require("../services/token.service");
 
+// Frontend (vercel.app) aur backend (onrender.com) alag domains hain,
+// isliye har request "cross-site" hoti hai — sameSite:"none" + secure:true
+// zaroori hai, warna browser refreshToken cookie ko kabhi bhejta hi nahi
+// aur silent token-refresh hamesha fail hoke logout kar deta hai.
 const refreshTokenCookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "strict",
+  secure: true,
+  sameSite: "none",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
